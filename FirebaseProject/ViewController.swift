@@ -14,11 +14,37 @@ class Store{
         self.word = word
         self.date = date
     }
-    
+    init(dict: [String: Any]){
+        if let w = dict["word"] as? String{
+            word = w
+        }
+        else{
+            word = "none"
+        }
+        if let d = dict["date"] as? String{
+            date = d
+        }
+        else{
+            date = "0/0/0000"
+        }
+        
+    }
     func saveToFirebase(){
         let dict = ["Date":date, "word":word] as [String:Any]
         key = ref.child("todays").childByAutoId().key ?? ""
         ref.child("todays").child(key).setValue(dict)
+    }
+    
+    func delete(){
+        ref.child("todays").child(key).removeValue()
+    }
+    func equals(st: Store)-> Bool{
+        if st.word == word && st.date == date{
+            return true
+        }
+        else{
+            return false
+        }
     }
 }
 
@@ -37,6 +63,7 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
     @IBOutlet weak var nameOutlet: UITextField!
     var ref: DatabaseReference!
     var words = [Store]()
+    var  wd = Store(word: "", date: "")
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -46,14 +73,56 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
         
         ref = Database.database().reference()
         ref.child("todays").observe(.childAdded){ snapshot in
-           let dict = snapshot.value as! [String: String]
-           let at = Store(word: dict["word"]!, date: dict["Date"]!)
-           self.words.append(at)
-         self.tableViewOutlet.reloadData()
+            let dict = snapshot.value as! [String: String]
+            let at = Store(word: dict["word"]!, date: dict["Date"]!)
+            self.words.append(at)
+            self.tableViewOutlet.reloadData()
+        }
+        ref.child("todays")
+        
+        //when adding it will show on the other phone
+        ref.child("todays").observe(.childAdded){ snapshot in
+            var dict = snapshot.value as! [String: Any]
+            var word = Store(dict: dict)
+            word.key = snapshot.key
+            if !(self.wd.equals(st: word)){
+                self.words.append(word)
+                self.tableViewOutlet.reloadData()
+            }
+        }
+        //removing on one phone and show on the other
+        ref.child("todays").observe(.childRemoved) { snapshot in
+            for i in 0..<self.words.count{
+                if self.words[i].key == snapshot.key{
+                    self.words.remove(at: i)
+                    self.tableViewOutlet.reloadData()
+                    break
+                }
+            }
         }
         
-    ref.child("todays")
+        //when removing on one phone will show on the other phone
+        ref.child("todays").observe(.childChanged) { snapshot in
+            let value = snapshot.value as! [String: Any]
+            for i in 0..<self.words.count{
+                if self.words[i].key == snapshot.key{
+                    self.words[i].word = value["word"] as! String
+                    self.words[i].date = value["date"] as! String
+                    self.tableViewOutlet.reloadData()
+                    break
+                }
+            }
+            
+            
+        }
+        
+        
+        
+        
+        
     }
+
+    
 
     
     @IBAction func addButton(_ sender: UIButton) {
@@ -90,5 +159,21 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
         
         return cell
     }
+    func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
+        return true
+        
+    }
+    func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
+        if editingStyle == .delete{
+            words[indexPath.row].delete()
+            //remove from array
+            words.remove(at: indexPath.row)
+            tableViewOutlet.reloadData()
+        }
+    }
+
+    
 }
+
+
 
